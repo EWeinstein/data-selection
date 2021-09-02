@@ -5,27 +5,24 @@ from autograd import grad, hessian
 from autograd.numpy.linalg import slogdet
 
 from pymanopt import Problem
-from pymanopt.solvers import TrustRegions, ConjugateGradient
+from pymanopt.solvers import TrustRegions
 from pymanopt.manifolds import Stiefel, Product, Euclidean
 
+import argparse
+import configparser
+import pickle
 from numpy.linalg import svd, qr, solve
 from scipy.linalg import expm
 from scipy.stats import multivariate_normal
 from scipy.special import gammaln
-import matplotlib
-try:
-    matplotlib.use("TkAgg")
-    pass
-except:
-    pass
 from matplotlib import pyplot as plt
 from datetime import datetime
 import pprint
-import pdb
+import os
 
 
 def K_matrices(X, c=1, beta=-0.5):
-
+    """Kernel matrices."""
     xmy = X[:, None, :] - X[None, :, :]
     fl2 = np.power(xmy, 2)
     K = np.prod(np.power(c*c + fl2, beta), axis=2)
@@ -46,6 +43,7 @@ def K_matrices(X, c=1, beta=-0.5):
 
 
 def onedrop_K_matrices(X, c=1, beta=-0.5):
+    """Kernel matrices for datasets with one dimension dropped."""
     # Final dimension gives K matrices for variable sigma, each with
     # corresponding dimension dropped.
     N, d = X.shape
@@ -97,7 +95,7 @@ def get_Sigma(H, v):
 
 
 def PCA_MLE(X, k):
-
+    """MLE of the PCA model."""
     # Statistics.
     N, d = np.shape(X)
     S = np.matmul(X.T, X)/X.shape[0]
@@ -114,7 +112,7 @@ def PCA_MLE(X, k):
 
 
 def PCA_volumeln(N, Lamfull, v, k, alpha):
-
+    """Prior volume term for PCA model."""
     lamhat = v * np.ones(len(Lamfull))
     lamhat[:k] = Lamfull[:k]
     d = len(Lamfull)
@@ -129,7 +127,7 @@ def PCA_volumeln(N, Lamfull, v, k, alpha):
 
 
 def PCA_MLE_loglike(N, d, k, Lp, vp):
-
+    """Likelihood term for PCA model."""
     return (-N * d * 0.5 * np.log(2 * np.pi)
             - N * 0.5 * np.sum(Lp)
             - N * (d - k) * 0.5 * vp
@@ -137,6 +135,7 @@ def PCA_MLE_loglike(N, d, k, Lp, vp):
 
 
 def PCA_marginal(X, k, alpha):
+    """Marginal likelihood of PCA model."""
     N, d = X.shape
 
     U, L, v, Lamfull = PCA_MLE(X, k)
@@ -150,7 +149,7 @@ def PCA_marginal(X, k, alpha):
 
 
 def PCA_latent_z_posterior(X, U, L, v):
-
+    """Mean posterior over latent variable."""
     H = np.matmul(U, np.diag(np.sqrt(L - v)))
     F = np.matmul(H.T, H) + v * np.eye(H.shape[1])
     zi = solve(F, np.matmul(H.T, X.T)).T
@@ -159,7 +158,7 @@ def PCA_latent_z_posterior(X, U, L, v):
 
 
 def build_Z(uparam, d, k):
-
+    """Building the Z matrix in Eqn. 51 of Minka (2000)."""
     m = int(d*k - k*(k+1)/2)
     indx = np.zeros((d, d)) - 1
     c = -1
@@ -174,7 +173,7 @@ def build_Z(uparam, d, k):
 
 
 def build_Ud(U):
-
+    """Building the Ud matrix in Eqn. 51 of Minka (2000)."""
     d, k = np.shape(U)
     Fd = np.zeros((d, d))
     Fd[:, :k] = U
@@ -183,11 +182,13 @@ def build_Ud(U):
 
 
 def U_prior(d, k):
+    """Prior log likelihood of U, from Minka (2000)."""
     a0 = (d - np.arange(k))/2
     return -k * np.log(2) + np.sum(gammaln(a0) - a0 * np.log(np.pi))
 
 
 def L_prior(Lp, alpha):
+    """Prior log likelihood of L (including Jacobian), from Minka (2000)."""
     # Prior (including jacobian)
     a0 = alpha/2
     a1 = (alpha/2) * np.exp(-Lp)
@@ -195,7 +196,7 @@ def L_prior(Lp, alpha):
 
 
 def v_prior(vp, d, k, alpha):
-
+    """Prior log likelihood of v, from Minka (2000)."""
     a0 = (alpha + 2)*(d - k)/2 - 1
     a1 = alpha * (d - k) * np.exp(-vp) / 2
 
@@ -203,7 +204,7 @@ def v_prior(vp, d, k, alpha):
 
 
 def Lp_transform(Bp, tp, vmin):
-
+    """Numerically stable transform to get constrained v and L parameters."""
     vp = np.logaddexp(tp, np.log(vmin))
     Lp = np.logaddexp(Bp, vp)
 
@@ -211,6 +212,7 @@ def Lp_transform(Bp, tp, vmin):
 
 
 def Bt_LnJacobian(Bp, tp, vmin):
+    """Jacobians for transform of Bp and tp."""
     vpmin = np.log(vmin)
     vp = np.logaddexp(tp, vpmin)
     Bdetln = np.sum(Bp - np.logaddexp(Bp, vp))
@@ -219,7 +221,7 @@ def Bt_LnJacobian(Bp, tp, vmin):
 
 
 def construct_cost(X, k, c=1, beta=-0.5, vmin=1e-5, T=1.):
-
+    """Construct the NKSD loss function."""
     # Basics.
     N, d = np.shape(X)
     m = int(d*k - k*(k+1)/2)
@@ -268,7 +270,7 @@ def construct_cost(X, k, c=1, beta=-0.5, vmin=1e-5, T=1.):
 
 
 def construct_od_cost(X, U0, d, k, c=1, beta=-0.5, vmin=1e-5, T=1.):
-
+    """Construct the NKSD loss function with individual dimensions dropped."""
     m = int(d*k - k*(k+1)/2)
     N = X.shape[0]
 
@@ -319,7 +321,7 @@ def construct_od_cost(X, U0, d, k, c=1, beta=-0.5, vmin=1e-5, T=1.):
 
 
 def laplace_approx(cost0, hess0, params, d, k, alpha, T=1, vmin=1e-5):
-
+    """Compute the Laplace approximation."""
     # Loss.
     lf0 = -cost0
 
@@ -341,7 +343,7 @@ def laplace_approx(cost0, hess0, params, d, k, alpha, T=1, vmin=1e-5):
 
 
 def min_NKSD(X, k, T=1, c=1, beta=-0.5, vmin=1e-5, maxiter=100):
-
+    """Optimize the NKSD using pymanopt."""
     # Basics.
     N, d = np.shape(X)
     m = int(d*k - k*(k+1)/2)
@@ -397,7 +399,10 @@ def min_NKSD(X, k, T=1, c=1, beta=-0.5, vmin=1e-5, maxiter=100):
 
 def IJ_approx(X, k, alpha, U0, params0, cost0, cost, laplace_cost,
               T=1, c=1, beta=-0.5, vmin=1e-5):
-
+    """
+    Estimate the SVC for different foreground dimensions
+    using the fast linear approximation.
+    """
     # Construct laplace cost for IJ.
     print('-------- Compute Hessian... --------')
     t0 = datetime.now()
@@ -438,7 +443,10 @@ def IJ_approx(X, k, alpha, U0, params0, cost0, cost, laplace_cost,
 
 
 def marg_NKSD_IJ(X, k, alpha, T=1, c=1, beta=-0.5, vmin=1e-5, maxiter=100):
-
+    """
+    Optimize the NKSD on the full dataset, then approximate the SVC for
+    datasets with individual columns removed.
+    """
     (U0, params0, cost0, cost, laplace_cost,
      Sigma_ksd_est, Sigma_mle_est, optlog) = min_NKSD(
         X, k, T=T, c=c, beta=beta, vmin=vmin, maxiter=maxiter)
@@ -451,8 +459,8 @@ def marg_NKSD_IJ(X, k, alpha, T=1, c=1, beta=-0.5, vmin=1e-5, maxiter=100):
     return delta_mnksd, marginal_est, Sigma_ksd_est, Sigma_mle_est, T, extras
 
 
-def simulate(N, k, d, corruptd=0, corruptfrac=0.5):
-
+def simulate_data(N, k, d, corruptd=0, corruptfrac=0.5):
+    """Simulate an example dataset."""
     # Draw parameter.
     H_true = np.random.randn(d, k)
     v_true = np.random.rand()
@@ -464,60 +472,111 @@ def simulate(N, k, d, corruptd=0, corruptfrac=0.5):
     # Corrupt some of the dimensions
     if corruptd > 0 and corruptfrac > 0:
         X[:int(N*corruptfrac), -corruptd:] = np.random.randn(corruptd)[None, :]
+    gene_names = np.array(['in', 'out'])[
+                      np.concatenate((np.zeros(d-corruptd, dtype=np.int64),
+                                      np.ones(corruptd, dtype=np.int64)))]
+    return X, gene_names, H_true, v_true, Sigma_true
 
-    return X, H_true, v_true, Sigma_true
+
+def load_data(file):
+    """Load (preprocessed) data from file."""
+    with open(file, 'rb') as dr:
+        X = pickle.load(dr)
+        gene_names = pickle.load(dr)
+
+    return X, gene_names
 
 
-if __name__ == '__main__':
+def main(config):
 
-    # Parameters.
-    N = 500
-    k = 2
-    d = 12
-    alpha = 0.1
-    corruptd = 2
-    corruptfrac = 0.5
-    T = 0.2
-    np.random.seed(4)
+    np.random.seed(int(config['general']['rng_seed']))
+    simulate = config['general']['simulate'] == 'True'
+    if simulate:
+        N = int(config['simulate']['n'])
+        k = int(config['simulate']['k'])
+        d = int(config['simulate']['d'])
+        corruptd = int(config['simulate']['corruptd'])
+        corruptfrac = float(config['simulate']['corruptfrac'])
+        X, gene_names, H_true, v_true, Sigma_true = simulate_data(
+                    N, k, d, corruptd=corruptd, corruptfrac=corruptfrac)
+    else:
+        X, gene_names = load_data(config['data']['file'])
+        N, d = X.shape
 
-    # Simulate.
-    X, H_true, v_true, Sigma_true = simulate(N, k, d, corruptd=corruptd,
-                                             corruptfrac=corruptfrac)
+    # Load model parameters.
+    k = int(config['model']['k'])
+    alpha = float(config['model']['alpha'])
+
+    # Load NKSD parameters.
+    c = float(config['nksd']['kernel_c'])
+    beta = float(config['nksd']['kernel_beta'])
+    T = float(config['nksd']['nksd_T'])
 
     # Estimate.
     IJ_grad, marginal_est, Sigma_ksd_est, Sigma_mle_est, T, extras = (
-                marg_NKSD_IJ(X, k, alpha, T=T))
+                marg_NKSD_IJ(X, k, alpha, T=T, c=c, beta=beta))
 
-    # Plot.
-    plt.figure(figsize=(8, 6))
-    plt.plot(np.reshape(Sigma_true, [-1]))
-    plt.plot(np.reshape(Sigma_mle_est, [-1]))
-    plt.plot(np.reshape(Sigma_ksd_est, [-1]))
-    plt.legend(['true', 'mle', 'ksd'])
-    plt.ylabel('covariance', fontsize=18)
-    plt.xlabel('matrix element', fontsize=18)
-    plt.savefig('PCA_Sigma_estimation.png')
+    if config['general']['save'] == 'True':
+        out_folder = config['general']['out_folder']
+        if config['general']['make_subfolder'] == 'True':
+            time_stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            out_folder = os.path.join(out_folder, 'logs', time_stamp)
+            os.mkdir(out_folder)
 
-    plt.figure(figsize=(8, 6))
-    plt.plot(IJ_grad)
-    plt.xticks(np.arange(len(IJ_grad)),
-               np.array(['in', 'out'])[
-                 np.concatenate((np.zeros(d-corruptd, dtype=np.int64),
-                                 np.ones(corruptd, dtype=np.int64)))],
-               rotation=-90, fontsize=14)
-    plt.yticks(fontsize=14)
-    plt.ylabel('SVC change (IJ)', fontsize=18)
-    plt.xlabel('dimension', fontsize=18)
-    plt.savefig('PCA_IJ.png')
+        # Results.
+        if simulate:
+            with open(os.path.join(out_folder, 'simulated_data.pickle'), 'wb'
+                      ) as rw:
+                pickle.dump(X, rw)
+                pickle.dump(gene_names, rw)
+        with open(os.path.join(out_folder, 'results.pickle'), 'wb') as rw:
+            pickle.dump(IJ_grad, rw)
+            pickle.dump(marginal_est, rw)
+            pickle.dump(Sigma_ksd_est, rw)
+            pickle.dump(Sigma_mle_est, rw)
+            pickle.dump(T, rw)
+            pickle.dump(extras, rw)
+        with open(os.path.join(out_folder, 'config.cfg'), 'w') as cw:
+            config.write(cw)
 
-    plt.figure(figsize=(8, 6))
-    plt.plot(-extras['cost0'] + extras['cost_inits'])
-    plt.xticks(np.arange(len(IJ_grad)),
-               np.array(['in', 'out'])[
-                 np.concatenate((np.zeros(d-corruptd, dtype=np.int64),
-                                 np.ones(corruptd, dtype=np.int64)))],
-               rotation=-90, fontsize=14)
-    plt.yticks(fontsize=14)
-    plt.ylabel('SVC change (null)', fontsize=18)
-    plt.xlabel('dimension', fontsize=18)
-    plt.savefig('PCA_init_cost.png')
+        # Plot.
+        plt.figure(figsize=(8, 6))
+        plt.plot(np.reshape(Sigma_mle_est, [-1]), 'o')
+        plt.plot(np.reshape(Sigma_ksd_est, [-1]), 'o')
+        if simulate:
+            plt.plot(np.reshape(Sigma_true, [-1]), 'o')
+        plt.legend(['true', 'mle', 'ksd'])
+        plt.ylabel('covariance', fontsize=18)
+        plt.xlabel('matrix element', fontsize=18)
+        plt.savefig(os.path.join(out_folder, 'PCA_Sigma_estimation.pdf'))
+
+        plt.figure(figsize=(8, 6))
+        plt.plot(-IJ_grad, 'o')
+        plt.xticks(np.arange(len(IJ_grad)), gene_names,
+                   rotation=-90, fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.ylabel(r'$\log \mathcal{K}_j - \log \mathcal{K}_0$', fontsize=18)
+        plt.xlabel('dimension', fontsize=18)
+        plt.savefig(os.path.join(out_folder, 'PCA_IJ.pdf'))
+
+        plt.figure(figsize=(8, 6))
+        naive_shift = -extras['cost0'] + extras['cost_inits']
+        plt.plot(-naive_shift, 'o')
+        plt.xticks(np.arange(len(IJ_grad)), gene_names,
+                   rotation=-90, fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.ylabel(r'$\log \mathcal{E}_j - \log \mathcal{E}_0$', fontsize=18)
+        plt.xlabel('dimension', fontsize=18)
+        plt.savefig(os.path.join(out_folder, 'PCA_init_cost.pdf'))
+
+
+if __name__ == '__main__':
+    # Parse command line arguments.
+    parser = argparse.ArgumentParser(
+        description="SVC data selection on a pPCA model.")
+    parser.add_argument('configPath')
+    args = parser.parse_args()
+    config = configparser.ConfigParser()
+    config.read(args.configPath)
+
+    main(config)

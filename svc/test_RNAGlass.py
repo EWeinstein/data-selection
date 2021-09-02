@@ -200,7 +200,7 @@ def test_sparseglass(select_all, onoff_shapes):
     config = {'general': {'cpu_data': 'False',
                           'cuda': 'False',
                           'pin_memory': 'False',
-                          'test': 'True',
+                          'simulate': 'True',
                           'small': 'True',
                           'rng_seed': '1',
                           'save': 'False'},

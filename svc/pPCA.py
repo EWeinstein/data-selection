@@ -492,11 +492,11 @@ def main(config):
     np.random.seed(int(config['general']['rng_seed']))
     simulate = config['general']['simulate'] == 'True'
     if simulate:
-        N = int(config['simulate']['n'])
-        k = int(config['simulate']['k'])
-        d = int(config['simulate']['d'])
-        corruptd = int(config['simulate']['corruptd'])
-        corruptfrac = float(config['simulate']['corruptfrac'])
+        N = 500
+        k = 2
+        d = 12
+        corruptd = 2
+        corruptfrac = 0.5
         X, gene_names, H_true, v_true, Sigma_true = simulate_data(
                     N, k, d, corruptd=corruptd, corruptfrac=corruptfrac)
     else:
@@ -520,7 +520,7 @@ def main(config):
         out_folder = config['general']['out_folder']
         if config['general']['make_subfolder'] == 'True':
             time_stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            out_folder = os.path.join(out_folder, 'logs', time_stamp)
+            out_folder = os.path.join(out_folder, time_stamp)
             os.mkdir(out_folder)
 
         # Results.

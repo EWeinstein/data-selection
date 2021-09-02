@@ -513,12 +513,18 @@ def simulate_data(small, device):
         N = 10
     else:
         N = 10000
+    # Sample discrete variable that determines whether expression is on or off.
     z = torch.distributions.bernoulli.Bernoulli(
                 torch.tensor([0.2, 0.5, 0.8])).sample((N,))
+    # Induce negative correlation between dimensions 0 and 3, and 1 and 4
     z = torch.cat([z, 1. - z[:, :1], 1. - z[:, 1:2]], dim=-1)
+    # Draw observations.
     x = torch.randn((N, 5)) * 0.2 + (1 + torch.randn((N, 5)) * 0.2) * z
+    # Introduce additional contamination in dimension 3.
     x[:, 2] = torch.randn(N) * 0.001 + 0.5
-    gene_names = ['gene_{}'.format(j) for j in range(x.shape[1])]
+    # Gene names.
+    gene_names = ['gene_0_in', 'gene_1_in', 'gene_2_out', 'gene_3_in',
+                  'gene_4_in']
     return TensorDataset(x), gene_names
 
 
@@ -549,8 +555,8 @@ def main(config):
     pyro.set_rng_seed(int(config['general']['rng_seed']))
 
     # Load data.
-    test = config['general']['test'] == 'True'
-    if test:
+    simulate = config['general']['simulate'] == 'True'
+    if simulate:
         small = config['general']['small'] == 'True'
         dataset, gene_names = simulate_data(small, device)
     else:
@@ -615,7 +621,7 @@ def main(config):
         out_folder = config['general']['out_folder']
         if config['general']['make_subfolder'] == 'True':
             time_stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            out_folder = os.path.join(out_folder, 'logs', time_stamp)
+            out_folder = os.path.join(out_folder, time_stamp)
             os.mkdir(out_folder)
         # Training curve.
         plt.figure(figsize=(8, 6))
@@ -635,25 +641,26 @@ def main(config):
         plt.xlabel('iteration', fontsize=18)
         plt.ylabel(r'SVC', fontsize=18)
         plt.savefig(os.path.join(out_folder, 'SVC_mn_sd.pdf'))
-        plt.figure(figsize=(8, 6))
-        plt.plot(select_gaps)
-        plt.xlabel('iteration', fontsize=18)
-        plt.ylabel(r'min |selection prob - 0.5|', fontsize=18)
-        plt.savefig(os.path.join(out_folder, 'selection_gaps.pdf'))
+
         # Data selection results.
         plt.figure(figsize=(8, 6))
         plt.plot(select_prob, 'o')
-        plt.xlabel('gene', fontsize=18)
-        plt.ylabel('selection probability', fontsize=18)
+        plt.xticks(np.arange(len(gene_names)), gene_names,
+                   rotation=-90, fontsize=16)
+        plt.ylabel(r'selection probability $\phi$', fontsize=18)
+        plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'selection_prob.pdf'))
         # Plot posterior over h.
         h = pyro.param("glass_h_mn").detach().cpu().numpy()
         h_gap = h[:, 0] - h[:, 1]
         plt.figure(figsize=(8, 6))
         plt.plot(h_gap, 'o')
-        plt.ylabel(r'$\Delta E$', fontsize=18)
-        plt.xlabel('gene', fontsize=18)
+        plt.ylabel(r'$H_1 - H_2$', fontsize=18)
+        plt.xticks(np.arange(len(gene_names)), gene_names,
+                   rotation=-90, fontsize=16)
+        plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'glass_h_deltaE.pdf'))
+
         # Plot posterior over J.
         Jraw = pyro.param("glass_J_mn").detach()
         J = model.jorganizer.forward(Jraw).cpu().numpy()
@@ -664,8 +671,10 @@ def main(config):
         plt.imshow(-interact, cmap='seismic', vmin=-clim, vmax=clim)
         plt.colorbar()
         plt.title(r'$\Delta E$', fontsize=18)
-        plt.xlabel('gene', fontsize=18)
-        plt.ylabel('gene', fontsize=18)
+        plt.xticks(np.arange(len(gene_names)), gene_names,
+                   rotation=-90, fontsize=16)
+        plt.yticks(np.arange(len(gene_names)), gene_names, fontsize=16)
+        plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'glass_J_deltaE.pdf'))
 
         # Save config.
@@ -722,7 +731,7 @@ def main(config):
         with open(os.path.join(out_folder, 'config.cfg'), 'w') as cw:
             config.write(cw)
 
-        if test:
+        if simulate:
             with open(os.path.join(out_folder, 'simulated_data.pickle'), 'wb'
                       ) as rw:
                 pickle.dump(dataset.tensors[0].numpy(), rw)

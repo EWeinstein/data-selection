@@ -648,7 +648,7 @@ def main(config):
         plt.xticks(np.arange(len(gene_names)), gene_names,
                    rotation=-90, fontsize=16)
         plt.yticks(fontsize=16)
-        plt.ylabel(r'selection probability $\phi$', fontsize=18)
+        plt.ylabel(r'selection probability $1/(1 + \exp(-\phi))$', fontsize=18)
         plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'selection_prob.pdf'))
         # Plot posterior over h.

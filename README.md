@@ -38,7 +38,7 @@ To perform data selection on the glass model of gene expression data described i
 A detailed description of the model's options and how to input your own data can be found in the config file `example_RNAGlass.cfg`.
 
 Results will (by default) be put in a time-stamped subfolder within the results
-folder. Below is an example output plot based on simulated data showing which data dimensions are included (selection probability <img src="https://render.githubusercontent.com/render/math?math=\phi"> close to 1) and which are excluded (selection probability <img src="https://render.githubusercontent.com/render/math?math=\phi"> close to 0) by the stochastic data selection procedure. The dimension marked "out" has more severe misspecification than the others, and it is, appropriately,
+folder. Below is an example output plot based on simulated data showing which data dimensions are included (selection probability close to 1) and which are excluded (selection probability close to 0) by the stochastic data selection procedure. The dimension marked "out" has more severe misspecification than the others, and it is, appropriately,
 deselected.
 
 ![selection probability](svc/results/examples/selection_prob.png)

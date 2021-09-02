@@ -1,12 +1,30 @@
+# Bayesian data selection
+This repo provides example code implementing Bayesian data selection with the "Stein volume criterion (SVC)", as introduced in the paper
 
-
-# SVC
-
+> Bayesian data selection, Eli N. Weinstein and Jeffrey W. Miller, 2021
 
 ## Installation
 
-To install the package, create a new python 3.7 virtual environment (eg. using conda) and run:
+Download this repo, create a new python 3 virtual environment (eg. using conda), and run
 
-    pip install "git+https://github.com/debbiemarkslab/MuE.git#egg=MuE[extras]" --use-feature=2020-resolver
+    pip install .
 
-To run the models at large scale, you will need to make sure you have access to a GPU with CUDA installed. See https://www.tensorflow.org/install/gpu for further support.
+To test your installation, navigate to the `svc` subfolder and run
+
+    pytest
+
+## pPCA
+
+To perform data selection on a probabilistic PCA model, using the fast linear approximation described in the paper, navigate to the `svc` subfolder and run
+
+    python pPCA.py example_pPCA.cfg
+
+A detailed description of the model's options and how to input your own data can be found in the config file `example_pPCA.cfg`.
+
+## Glass
+
+To perform data selection on the glass model of expression data described in the paper, using a variational approximation to the SVC and the LOORF estimator, navigate to the `svc` subfolder and run
+
+    python RNAGlass.py example_RNAGlass.cfg
+
+A detailed description of the model's options and how to input your own data can be found in the config file `example_RNAGlass.cfg`.

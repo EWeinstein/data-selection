@@ -31,7 +31,7 @@ folder. Below is an example output plot based on simulated data showing the SVC 
 
 ## Glass
 
-To perform data selection on the glass model of expression data described in the paper, using a variational approximation to the SVC and the LOORF estimator, navigate to the `svc` subfolder and run
+To perform data selection on the glass model of gene expression data described in the paper, using a variational approximation to the SVC and the LOORF estimator, navigate to the `svc` subfolder and run
 
     python RNAGlass.py example_RNAGlass.cfg
 

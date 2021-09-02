@@ -1,3 +1,4 @@
+
 # Bayesian data selection
 This repo provides example code implementing Bayesian data selection with the "Stein volume criterion (SVC)", as introduced in the paper
 
@@ -22,7 +23,7 @@ To perform data selection on a probabilistic PCA model, using the fast linear ap
 A detailed description of the model's options and how to input your own data can be found in the config file `example_pPCA.cfg`.
 
 Results will (by default) be put in a time-stamped subfolder within the results
-folder. Below is an example output plot based on simulated data showing the SVC difference (with m_{B_j} = m_{F_0} - m_{F_j}) for each data dimension. Dimensions marked "out" are those over which the model is misspecified, and we see that the SVC difference is, appropriately, larger over those dimensions.
+folder. Below is an example output plot based on simulated data showing the SVC difference (with $m_{\mathcal{B}_j} = m_{\mathcal{F}_0} - m_{\mathcal{F}_j}$) for each data dimension. Dimensions marked "out" are those over which the model is misspecified, and we see that the SVC difference is, appropriately, larger over those dimensions.
 
 ![SVC difference pPCA](svc/results/examples/PCA_IJ.png)
 
@@ -35,7 +36,7 @@ To perform data selection on the glass model of expression data described in the
 A detailed description of the model's options and how to input your own data can be found in the config file `example_RNAGlass.cfg`.
 
 Results will (by default) be put in a time-stamped subfolder within the results
-folder. Below is an example output plot based on simulated data showing which data dimensions are included (selection probability phi close to 1) and which are excluded (selection probability phi close to 0) by the stochastic data selection procedure. The dimension marked "out" has more severe misspecification than the others, and it is, appropriately,
+folder. Below is an example output plot based on simulated data showing which data dimensions are included (selection probability $\phi$ close to 1) and which are excluded (selection probability $\phi$ close to 0) by the stochastic data selection procedure. The dimension marked "out" has more severe misspecification than the others, and it is, appropriately,
 deselected.
 
 ![selection probability](svc/results/examples/selection_prob.png)

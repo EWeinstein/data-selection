@@ -21,6 +21,11 @@ To perform data selection on a probabilistic PCA model, using the fast linear ap
 
 A detailed description of the model's options and how to input your own data can be found in the config file `example_pPCA.cfg`.
 
+Results will (by default) be put in a time-stamped subfolder within the results
+folder. Below is an example output plot based on simulated data showing the SVC difference (with m_{B_j} = m_{F_0} - m_{F_j}) for each data dimension. Dimensions marked "out" are those over which the model is misspecified, and we see that the SVC difference is, appropriately, larger over those dimensions.
+
+![SVC difference pPCA](results/examples/PCA_IJ.pdf)
+
 ## Glass
 
 To perform data selection on the glass model of expression data described in the paper, using a variational approximation to the SVC and the LOORF estimator, navigate to the `svc` subfolder and run
@@ -28,3 +33,13 @@ To perform data selection on the glass model of expression data described in the
     python RNAGlass.py example_RNAGlass.cfg
 
 A detailed description of the model's options and how to input your own data can be found in the config file `example_RNAGlass.cfg`.
+
+Results will (by default) be put in a time-stamped subfolder within the results
+folder. Below is an example output plot based on simulated data showing which data dimensions are included (selection probability phi close to 1) and which are excluded (selection probability close to 0) by the stochastic data selection procedure. The dimension marked "out" has more severe misspecification than the others, and it is, appropriately,
+deselected.
+
+![selection probability](results/examples/selection_prob.pdf)
+
+The below plot shows the learned foreground model parameters. Note the simulated data is designed to have negative correlation between dimensions 0 and 3, and between dimensions 1 and 4.
+
+![delta E](results/examples/glass_J_deltaE.pdf)

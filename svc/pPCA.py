@@ -548,6 +548,7 @@ def main(config):
         plt.legend(['true', 'mle', 'ksd'])
         plt.ylabel('covariance', fontsize=18)
         plt.xlabel('matrix element', fontsize=18)
+        plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'PCA_Sigma_estimation.pdf'))
 
         plt.figure(figsize=(8, 6))
@@ -557,6 +558,7 @@ def main(config):
         plt.yticks(fontsize=14)
         plt.ylabel(r'$\log \mathcal{K}_j - \log \mathcal{K}_0$', fontsize=18)
         plt.xlabel('dimension', fontsize=18)
+        plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'PCA_IJ.pdf'))
 
         plt.figure(figsize=(8, 6))
@@ -567,6 +569,7 @@ def main(config):
         plt.yticks(fontsize=14)
         plt.ylabel(r'$\log \mathcal{E}_j - \log \mathcal{E}_0$', fontsize=18)
         plt.xlabel('dimension', fontsize=18)
+        plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'PCA_init_cost.pdf'))
 
 

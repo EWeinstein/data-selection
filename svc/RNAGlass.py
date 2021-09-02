@@ -507,7 +507,7 @@ class SparseGlass(nn.Module):
         return np.array(svcs), np.array(select_gaps), select_prob.cpu().numpy()
 
 
-def generate_data(small, device):
+def simulate_data(small, device):
     """Generate example dataset."""
     if small:
         N = 10
@@ -522,24 +522,11 @@ def generate_data(small, device):
     return TensorDataset(x), gene_names
 
 
-def scrna(config, device):
-    """Load preprocessed scRNA data."""
+def load_data(config, device):
+    """Load (preprocessed) data from file."""
     with open(config['data']['file'], 'rb') as dr:
         X = pickle.load(dr)
         gene_names = pickle.load(dr)
-
-    if config['data']['square'] == 'True':
-        X = X**2
-    if config['data']['log1p'] == 'True':
-        X = np.log(1. + X)
-    if config['data']['jitter'] == 'True':
-        np.random.seed(0)
-        X += np.random.randn(*X.shape) * 0.5
-    if config['general']['small'] == 'True':
-        np.random.seed(0)
-        indx = np.random.choice(X.shape[1], 5)
-        X = X[:, torch.tensor(indx)]
-        gene_names = [gene_names[i] for i in indx]
 
     return TensorDataset(torch.tensor(X, device=device)), gene_names
 
@@ -565,9 +552,9 @@ def main(config):
     test = config['general']['test'] == 'True'
     if test:
         small = config['general']['small'] == 'True'
-        dataset, gene_names = generate_data(small, device)
+        dataset, gene_names = simulate_data(small, device)
     else:
-        dataset, gene_names = scrna(config, device)
+        dataset, gene_names = load_data(config, device)
     ngenes = len(gene_names)
 
     # Construct model
@@ -734,6 +721,12 @@ def main(config):
         np.save(config['results']['svcs'], svcs)
         with open(os.path.join(out_folder, 'config.cfg'), 'w') as cw:
             config.write(cw)
+
+        if test:
+            with open(os.path.join(out_folder, 'simulated_data.pickle'), 'wb'
+                      ) as rw:
+                pickle.dump(dataset.tensors[0].numpy(), rw)
+                pickle.dump(gene_names, rw)
 
 
 if __name__ == '__main__':

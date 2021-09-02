@@ -643,10 +643,11 @@ def main(config):
         plt.savefig(os.path.join(out_folder, 'SVC_mn_sd.pdf'))
 
         # Data selection results.
-        plt.figure(figsize=(8, 6))
+        plt.figure(figsize=(6, 6))
         plt.plot(select_prob, 'o')
         plt.xticks(np.arange(len(gene_names)), gene_names,
                    rotation=-90, fontsize=16)
+        plt.yticks(fontsize=16)
         plt.ylabel(r'selection probability $\phi$', fontsize=18)
         plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'selection_prob.pdf'))
@@ -666,10 +667,11 @@ def main(config):
         J = model.jorganizer.forward(Jraw).cpu().numpy()
         interact = (J[:, :, 1, 0] + J[:, :, 0, 1]
                     - J[:, :, 0, 0] - J[:, :, 1, 1])
-        plt.figure(figsize=(8, 8))
+        plt.figure(figsize=(6, 6))
         clim = np.max(np.abs(interact))
         plt.imshow(-interact, cmap='seismic', vmin=-clim, vmax=clim)
-        plt.colorbar()
+        cbar = plt.colorbar()
+        cbar.ax.tick_params(labelsize=16)
         plt.title(r'$\Delta E$', fontsize=18)
         plt.xticks(np.arange(len(gene_names)), gene_names,
                    rotation=-90, fontsize=16)

@@ -551,22 +551,22 @@ def main(config):
         plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'PCA_Sigma_estimation.pdf'))
 
-        plt.figure(figsize=(8, 6))
+        plt.figure(figsize=(6, 6))
         plt.plot(-IJ_grad, 'o')
         plt.xticks(np.arange(len(IJ_grad)), gene_names,
                    rotation=-90, fontsize=14)
-        plt.yticks(fontsize=14)
+        plt.yticks(fontsize=16)
         plt.ylabel(r'$\log \mathcal{K}_j - \log \mathcal{K}_0$', fontsize=18)
         plt.xlabel('dimension', fontsize=18)
         plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'PCA_IJ.pdf'))
 
-        plt.figure(figsize=(8, 6))
+        plt.figure(figsize=(6, 6))
         naive_shift = -extras['cost0'] + extras['cost_inits']
         plt.plot(-naive_shift, 'o')
         plt.xticks(np.arange(len(IJ_grad)), gene_names,
                    rotation=-90, fontsize=14)
-        plt.yticks(fontsize=14)
+        plt.yticks(fontsize=16)
         plt.ylabel(r'$\log \mathcal{E}_j - \log \mathcal{E}_0$', fontsize=18)
         plt.xlabel('dimension', fontsize=18)
         plt.tight_layout()

@@ -4,6 +4,8 @@ This repo provides example code implementing Bayesian data selection with the "S
 
 > Bayesian data selection, Eli N. Weinstein and Jeffrey W. Miller, 2021
 
+![Figure 1](Figure_1.png)
+
 ## Installation
 
 Download this repo, create a new python 3 virtual environment (eg. using conda), and run

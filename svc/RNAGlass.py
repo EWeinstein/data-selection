@@ -532,6 +532,8 @@ def main(config):
         plt.plot(svcs)
         plt.xlabel('iteration', fontsize=18)
         plt.ylabel(r'Estimated SVC', fontsize=18)
+        plt.yticks(fontsize=16)
+        plt.xticks(fontsize=16)
         plt.savefig(os.path.join(out_folder, 'SVC.pdf'))
         plt.figure(figsize=(8, 6))
 
@@ -543,7 +545,9 @@ def main(config):
         plt.plot(svc_mns - svc_sds, 'b:', label=r'$\mu - \sigma$')
         plt.legend(fontsize=16)
         plt.xlabel('iteration', fontsize=18)
-        plt.ylabel(r'SVC', fontsize=18)
+        plt.ylabel(r'Estimated SVC', fontsize=18)
+        plt.yticks(fontsize=16)
+        plt.xticks(fontsize=16)
         plt.savefig(os.path.join(out_folder, 'SVC_mn_sd.pdf'))
 
         # Data selection results.
@@ -564,13 +568,9 @@ def main(config):
         plt.ylabel(r'$H_1 - H_0$', fontsize=18)
         plt.xticks(np.arange(len(gene_names)), gene_names,
                    rotation=-90, fontsize=16)
+        plt.yticks(fontsize=16)
         plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'glass_h_deltaE.pdf'))
-
-        plt.figure(figsize=(6, 6))
-        plt.scatter(dataset.tensors[0][:, 0], dataset.tensors[0][:, 1],
-                    s=10, alpha=0.2)
-        plt.savefig(os.path.join(out_folder, 'sim_data.pdf'))
 
         # Plot posterior over J.
         Jraw = pyro.param("glass_J_mn").detach()
@@ -579,7 +579,7 @@ def main(config):
         plt.imshow(np.sum(np.abs(J), axis=(2, 3)), cmap='Blues', vmin=0)
         cbar = plt.colorbar()
         cbar.ax.tick_params(labelsize=16)
-        plt.title(r'Interaction magnitude $||J||_1$', fontsize=18)
+        plt.title(r'Estimated interaction $||J||_1$', fontsize=16)
         plt.xticks(np.arange(len(gene_names)), gene_names,
                    rotation=-90, fontsize=16)
         plt.yticks(np.arange(len(gene_names)), gene_names, fontsize=16)
@@ -612,6 +612,7 @@ def main(config):
         interact_sd = interact_sd - np.diag(np.diag(interact_sd))
         plt.figure(figsize=(6, 6))
         plt.imshow(interact_sd)
+        plt.title('Posterior standard devation of J', fontsize=16)
         cbar = plt.colorbar()
         cbar.ax.tick_params(labelsize=16)
         plt.xticks(np.arange(len(gene_names)), gene_names,

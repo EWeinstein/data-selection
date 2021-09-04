@@ -59,8 +59,7 @@ class SteinGlass(TorchDistribution):
     arg_constraints = {}
 
     def __init__(self, gene_scale, gene_mean, glass_h, glass_J,
-                 on_mean, on_scale, off_scale, onoff_shapes=True,
-                 kernel_c=1., kernel_beta=-0.5, kernel_l=-0.5,
+                 kernel_c=1., kernel_beta=-0.5,
                  nksd_T=1., validate_args=None):
 
         self.gene_scale = gene_scale
@@ -68,13 +67,8 @@ class SteinGlass(TorchDistribution):
         self.ngenes = glass_h.shape[0]
         self.glass_h = glass_h
         self.glass_J = glass_J
-        self.on_mean = on_mean
-        self.on_scale = on_scale
-        self.off_scale = off_scale
-        self.onoff_shapes = onoff_shapes
         self.kernel_c = kernel_c
         self.kernel_beta = torch.tensor(kernel_beta)
-        self.kernel_l = kernel_l
         self.nksd_T = nksd_T
 
         super(SteinGlass, self).__init__(
@@ -98,15 +92,7 @@ class SteinGlass(TorchDistribution):
         # Order-two term
         term_two = torch.einsum('ijk,jakb,iab->ij', dsigma, self.glass_J,
                                 sigma)
-        if self.onoff_shapes:
-            onterm = (- dinvlogit * (value - self.on_mean)**2
-                      - invlogit * 2 * (value - self.on_mean)
-                      ) / (2 * self.on_scale**2)
-            offterm = (dinvlogit * value**2 - (1 - invlogit) * 2 * value
-                       ) / (2 * self.off_scale**2)
-            return term_one + term_two + onterm + offterm
-        else:
-            return term_one + term_two
+        return term_one + term_two
 
     def kernel_terms(self, value):
         """Compute kernel terms in NKSD."""
@@ -124,22 +110,7 @@ class SteinGlass(TorchDistribution):
                         dim=2) * K
         # Normalization.
         Kbar = torch.sum(K)
-
-        # Domain-limited correction.
-        if self.kernel_l is not None:
-            xl = value[:, None, :] - self.kernel_l
-            yl = value[None, :, :] - self.kernel_l
-            l_corr = torch.prod(xl * yl, dim=2)
-            l_corr = l_corr - torch.diag(torch.diag(l_corr))
-            Kl = K * l_corr
-            Kpl = Kp * l_corr[:, :, None] + Kl[:, :, None] / xl
-            Kppl = (Kpp + torch.sum(Kp / yl, dim=2)
-                    + torch.sum(- Kp / xl, dim=2)
-                    + torch.sum(1 / (xl * yl), dim=2) * K) * l_corr
-            Kbarl = torch.sum(Kl)
-            return Kl, Kpl, Kppl, Kbarl
-        else:
-            return K, Kp, Kpp, Kbar
+        return K, Kp, Kpp, Kbar
 
     def log_prob(self, value):
         """
@@ -156,7 +127,7 @@ class SteinGlass(TorchDistribution):
         ksd = (torch.einsum('ia,ja,ij->', sscore, sscore, K) +
                2 * torch.einsum('ija,ja->', Kp, sscore) +
                torch.sum(Kpp))
-        # Normalized KSD.
+        # Normalized KSD (NKSD).
         nksd = ksd / Kbar
 
         # Negative loss.
@@ -234,11 +205,7 @@ class SparseGlass(nn.Module):
                  prior_gene_scale_lbound=1.,
                  prior_gene_mean_mn=1., prior_gene_mean_sd=0.,
                  prior_glass_h_sd=1., prior_glass_J_scale=0.1,
-                 prior_on_mean_mn=0., prior_on_mean_sd=0.,
-                 prior_on_scale_mn=0., prior_on_scale_sd=0.,
-                 prior_off_scale_mn=0., prior_off_scale_sd=0.,
-                 onoff_shapes=False,
-                 kernel_c=1., kernel_beta=-0.5, kernel_l=-0.5, nksd_T=1.,
+                 kernel_c=1., kernel_beta=-0.5, nksd_T=1.,
                  cuda=False, pin_memory=False):
         super().__init__()
         self.ngenes = ngenes
@@ -250,16 +217,8 @@ class SparseGlass(nn.Module):
         self.prior_gene_mean_sd = prior_gene_mean_sd
         self.prior_glass_h_sd = prior_glass_h_sd
         self.prior_glass_J_scale = prior_glass_J_scale
-        self.prior_on_mean_mn = prior_on_mean_mn
-        self.prior_on_mean_sd = prior_on_mean_sd
-        self.prior_on_scale_mn = prior_on_scale_mn
-        self.prior_on_scale_sd = prior_on_scale_sd
-        self.prior_off_scale_mn = prior_off_scale_mn
-        self.prior_off_scale_sd = prior_off_scale_sd
-        self.onoff_shapes = onoff_shapes
         self.kernel_c = kernel_c
         self.kernel_beta = kernel_beta
-        self.kernel_l = kernel_l
         self.nksd_T = nksd_T
         self.cuda = cuda
         self.pin_memory = pin_memory
@@ -291,34 +250,6 @@ class SparseGlass(nn.Module):
         )
         glass_J = self.jorganizer.forward(glass_J)
 
-        # Mode shapes.
-        if self.onoff_shapes:
-            on_mean = pyro.sample(
-                "on_mean",
-                dist.Normal(torch.tensor(self.prior_on_mean_mn)
-                            * torch.ones((self.ngenes,)),
-                            torch.tensor(self.prior_on_mean_sd)).to_event(1)
-            )
-            on_mean = softplus(on_mean) + gene_mean
-            on_mean = on_mean[select]
-            on_scale = pyro.sample(
-                "on_scale",
-                dist.Normal(torch.tensor(self.prior_on_scale_mn)
-                            * torch.ones((self.ngenes,)),
-                            torch.tensor(self.prior_on_scale_sd)).to_event(1)
-            )
-            on_scale = softplus(on_scale)
-            on_scale = on_scale[select]
-            off_scale = pyro.sample(
-                "off_scale",
-                dist.Normal(torch.tensor(self.prior_off_scale_mn),
-                            torch.tensor(self.prior_off_scale_sd))
-            )
-            off_scale = softplus(off_scale)
-        else:
-            on_mean, on_scale = torch.tensor(1.), torch.tensor(1.)
-            off_scale = torch.tensor(1.)
-
         # Take selected subset.
         data = data[:, select]
         glass_h = glass_h[select]
@@ -332,10 +263,8 @@ class SparseGlass(nn.Module):
                     "obs_seq",
                     SteinGlass(
                         gene_scale, gene_mean, glass_h, glass_J,
-                        on_mean, on_scale, off_scale,
-                        onoff_shapes=self.onoff_shapes,
                         kernel_c=self.kernel_c, kernel_beta=self.kernel_beta,
-                        kernel_l=self.kernel_l, nksd_T=self.nksd_T
+                        nksd_T=self.nksd_T
                     ),
                     obs=data,
                 )
@@ -377,34 +306,6 @@ class SparseGlass(nn.Module):
         pyro.sample("glass_J",
                     dist.Laplace(glass_J_mn,
                                  softplus(glass_J_sd)).to_event(3))
-        if self.onoff_shapes:
-            on_mean_mn = pyro.param(
-                "on_mean_mn", torch.zeros((self.ngenes,))
-            )
-            on_mean_sd = pyro.param(
-                "on_mean_sd", torch.zeros((self.ngenes,))
-            )
-            pyro.sample("on_mean",
-                        dist.Normal(on_mean_mn,
-                                    softplus(on_mean_sd)).to_event(1))
-            on_scale_mn = pyro.param(
-                "on_scale_mn", torch.zeros((self.ngenes,))
-            )
-            on_scale_sd = pyro.param(
-                "on_scale_sd", torch.zeros((self.ngenes,))
-            )
-            pyro.sample("on_scale",
-                        dist.Normal(on_scale_mn,
-                                    softplus(on_scale_sd)).to_event(1))
-            off_scale_mn = pyro.param(
-                "off_scale_mn", torch.tensor(0.)
-            )
-            off_scale_sd = pyro.param(
-                "off_scale_sd", torch.tensor(0.)
-            )
-            pyro.sample("off_scale",
-                        dist.Normal(off_scale_mn,
-                                    softplus(off_scale_sd)))
 
     def fit_svi(self, dataset, epochs=2, batch_size=100, scheduler=None,
                 jit=False, learning_rate=0.01,
@@ -509,22 +410,38 @@ class SparseGlass(nn.Module):
 
 def simulate_data(small, device):
     """Generate example dataset."""
+    # For this example dataset, the glass model is severly misspecified over
+    # dimension 2, but still somewhat misspecified over
+    # the foreground dimensions {0, 1, 3, 4}.
+    # Running at moderately large values of D (e.g. 200), where D is the
+    # dimension of the Pitman-Yor mixture model, leads to all of the
+    # dimensions being excluded by the data selection procedure.
+    # Running at high D values (e.g. 2000) leads to just the
+    # second dimension being excluded.
+    # The NKSD posterior also, in this high m_B case, learns that there
+    # are interactions between dimensions 0 and 3 and between 1 and 4. However,
+    # in this case, due to misspecification and the properties of the KSD, the
+    # sign of J can be flipped relative to the correlation structure in
+    # the synthetic data.
+
+    # Dataset size.
     if small:
         N = 10
     else:
         N = 10000
     # Sample discrete variable that determines whether expression is on or off.
     z = torch.distributions.bernoulli.Bernoulli(
-                torch.tensor([0.2, 0.5, 0.8])).sample((N,))
-    # Induce negative correlation between dimensions 0 and 3, and 1 and 4
-    z = torch.cat([z, 1. - z[:, :1], 1. - z[:, 1:2]], dim=-1)
+                torch.tensor([0.2, 0.5, 0.8])).sample((N,))  # , 0.5, 0.8
+    # Induce correlation between dimensions 0 and 3 and between 1 and 4.
+    z = torch.cat([z, 1 - z[:, :1], z[:, 1:2]], dim=-1)
     # Draw observations.
-    x = torch.randn((N, 5)) * 0.2 + (1 + torch.randn((N, 5)) * 0.2) * z
+    x = torch.randn((N, 5)) * 0.1 + z
     # Introduce additional contamination in dimension 3.
     x[:, 2] = torch.randn(N) * 0.001 + 0.5
     # Gene names.
     gene_names = ['gene_0_in', 'gene_1_in', 'gene_2_out', 'gene_3_in',
                   'gene_4_in']
+
     return TensorDataset(x), gene_names
 
 
@@ -564,11 +481,6 @@ def main(config):
     ngenes = len(gene_names)
 
     # Construct model
-    if config['nksd']['kernel_l'] == 'None':
-        kernel_l = None
-    else:
-        kernel_l = float(config['nksd']['kernel_l'])
-    onoff_shapes = config['model']['onoff_shapes'] == 'True'
     model = SparseGlass(
             ngenes,
             prior_gene_scale_mn=float(config['model']['prior_gene_scale_mn']),
@@ -579,16 +491,8 @@ def main(config):
             prior_gene_mean_sd=float(config['model']['prior_gene_mean_sd']),
             prior_glass_h_sd=float(config['model']['prior_glass_h_sd']),
             prior_glass_J_scale=float(config['model']['prior_glass_J_scale']),
-            prior_on_mean_mn=float(config['model']['prior_on_mean_mn']),
-            prior_on_mean_sd=float(config['model']['prior_on_mean_sd']),
-            prior_on_scale_mn=float(config['model']['prior_on_scale_mn']),
-            prior_on_scale_sd=float(config['model']['prior_on_scale_sd']),
-            prior_off_scale_mn=float(config['model']['prior_off_scale_mn']),
-            prior_off_scale_sd=float(config['model']['prior_off_scale_sd']),
-            onoff_shapes=onoff_shapes,
             kernel_c=float(config['nksd']['kernel_c']),
             kernel_beta=float(config['nksd']['kernel_beta']),
-            kernel_l=kernel_l,
             nksd_T=float(config['nksd']['nksd_T']),
             cuda=cuda, pin_memory=pin_memory)
 
@@ -651,25 +555,43 @@ def main(config):
         plt.ylabel(r'selection probability $1/(1 + \exp(-\phi))$', fontsize=18)
         plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'selection_prob.pdf'))
+
         # Plot posterior over h.
         h = pyro.param("glass_h_mn").detach().cpu().numpy()
-        h_gap = h[:, 0] - h[:, 1]
+        h_gap = h[:, 1] - h[:, 0]
         plt.figure(figsize=(8, 6))
         plt.plot(h_gap, 'o')
-        plt.ylabel(r'$H_1 - H_2$', fontsize=18)
+        plt.ylabel(r'$H_1 - H_0$', fontsize=18)
         plt.xticks(np.arange(len(gene_names)), gene_names,
                    rotation=-90, fontsize=16)
         plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'glass_h_deltaE.pdf'))
 
+        plt.figure(figsize=(6, 6))
+        plt.scatter(dataset.tensors[0][:, 0], dataset.tensors[0][:, 1],
+                    s=10, alpha=0.2)
+        plt.savefig(os.path.join(out_folder, 'sim_data.pdf'))
+
         # Plot posterior over J.
         Jraw = pyro.param("glass_J_mn").detach()
         J = model.jorganizer.forward(Jraw).cpu().numpy()
+        plt.figure(figsize=(6, 6))
+        plt.imshow(np.sum(np.abs(J), axis=(2, 3)), cmap='Blues', vmin=0)
+        cbar = plt.colorbar()
+        cbar.ax.tick_params(labelsize=16)
+        plt.title(r'Interaction magnitude $||J||_1$', fontsize=18)
+        plt.xticks(np.arange(len(gene_names)), gene_names,
+                   rotation=-90, fontsize=16)
+        plt.yticks(np.arange(len(gene_names)), gene_names, fontsize=16)
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_folder, 'glass_J.pdf'))
+
+        # Plot learned interaction energies.
         interact = (J[:, :, 1, 0] + J[:, :, 0, 1]
                     - J[:, :, 0, 0] - J[:, :, 1, 1])
         plt.figure(figsize=(6, 6))
         clim = np.max(np.abs(interact))
-        plt.imshow(-interact, cmap='seismic', vmin=-clim, vmax=clim)
+        plt.imshow(interact, cmap='seismic', vmin=-clim, vmax=clim)
         cbar = plt.colorbar()
         cbar.ax.tick_params(labelsize=16)
         plt.title(r'$\Delta E$', fontsize=18)
@@ -678,6 +600,25 @@ def main(config):
         plt.yticks(np.arange(len(gene_names)), gene_names, fontsize=16)
         plt.tight_layout()
         plt.savefig(os.path.join(out_folder, 'glass_J_deltaE.pdf'))
+
+        # Plot uncertainty in J.
+        Jsdraw = pyro.param("glass_J_sd").detach()
+        Jsd = model.jorganizer.forward(Jsdraw).cpu().numpy()
+        # Variance formula for Laplace, based on scale
+        Jvar = 2 * (softplus(torch.tensor(Jsd)).numpy()**2)
+        # From variance formula for independent random variables.
+        interact_sd = np.sqrt(np.sum(Jvar, axis=(2, 3)))
+        # Subtract diagonal which isn't used and so should be zero.
+        interact_sd = interact_sd - np.diag(np.diag(interact_sd))
+        plt.figure(figsize=(6, 6))
+        plt.imshow(interact_sd)
+        cbar = plt.colorbar()
+        cbar.ax.tick_params(labelsize=16)
+        plt.xticks(np.arange(len(gene_names)), gene_names,
+                   rotation=-90, fontsize=16)
+        plt.yticks(np.arange(len(gene_names)), gene_names, fontsize=16)
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_folder, 'glass_J_sd.pdf'))
 
         # Save config.
         config['results']['gene_mean_mn'] = str(pyro.param(
@@ -704,27 +645,6 @@ def main(config):
         Jsdraw = pyro.param("glass_J_sd").detach()
         Jsd = model.jorganizer.forward(Jsdraw).cpu().numpy()
         np.save(config['results']['glass_J_sd'], Jsd)
-        if onoff_shapes:
-            config['results']['on_mean_mn'] = os.path.join(out_folder,
-                                                           'on_mean_mn.npy')
-            np.save(config['results']['on_mean_mn'],
-                    pyro.param("on_mean_mn").detach().cpu().numpy())
-            config['results']['on_mean_sd'] = os.path.join(out_folder,
-                                                           'on_mean_sd.npy')
-            np.save(config['results']['on_mean_sd'],
-                    pyro.param("on_mean_sd").detach().cpu().numpy())
-            config['results']['on_scale_mn'] = os.path.join(out_folder,
-                                                            'on_scale_mn.npy')
-            np.save(config['results']['on_scale_mn'],
-                    pyro.param("on_scale_mn").detach().cpu().numpy())
-            config['results']['on_scale_sd'] = os.path.join(out_folder,
-                                                            'on_scale_sd.npy')
-            np.save(config['results']['on_scale_sd'],
-                    pyro.param("on_scale_sd").detach().cpu().numpy())
-            config['results']['off_scale_mn'] = str(pyro.param(
-                    "off_scale_mn").detach().cpu().numpy())
-            config['results']['off_scale_sd'] = str(pyro.param(
-                    "off_scale_sd").detach().cpu().numpy())
         config['results']['select_prob'] = os.path.join(out_folder,
                                                         'select_prob.npy')
         np.save(config['results']['select_prob'], select_prob)

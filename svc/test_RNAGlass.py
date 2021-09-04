@@ -26,8 +26,7 @@ def test_Jorganizer():
     assert torch.allclose(chk_J, tst_J)
 
 
-@pytest.mark.parametrize('onoff_shapes', [False, True])
-def test_stein_score(onoff_shapes):
+def test_stein_score():
     N = 5
     D = 3
 
@@ -35,42 +34,32 @@ def test_stein_score(onoff_shapes):
     jorganizer = model.Jorganizer(D)
     glass_J = jorganizer.forward(Jraw)
     glass_h = torch.randn((D, 2))
-    gene_scale = 1.5
-    gene_mean = 0.1
-    x = torch.randn((N, 3))
-    if onoff_shapes:
-        on_mean = 2 + torch.randn(D)
-        on_scale = 0.5 * torch.ones(D)
-        on_scale[0] += 1.
-        off_scale = torch.tensor(0.5)
-    else:
-        on_mean, on_scale, off_scale = None, None, None
+    gene_scale = 3.0
+    gene_mean = 1.0
+    x = torch.randn((N, D))
 
-    steinglass = model.SteinGlass(gene_scale, gene_mean, glass_h, glass_J,
-                                  on_mean, on_scale, off_scale,
-                                  onoff_shapes=onoff_shapes)
+    steinglass = model.SteinGlass(gene_scale, gene_mean, glass_h, glass_J)
     chk_score = steinglass.stein_score(x)
 
     xrg = torch.tensor(x, requires_grad=True)
-    tst_score = torch.ones_like(xrg)
     invlogit = 1/(1 + torch.exp(-gene_scale * (xrg - gene_mean)))
     sigma = torch.cat([(1-invlogit.unsqueeze(-1)), invlogit.unsqueeze(-1)],
                       -1)
     energy = (torch.einsum('ijk,jk->', sigma, glass_h) +
-              0.5*torch.einsum('ijk,jakb,iab', sigma, glass_J, sigma))
-    if onoff_shapes:
-        energy += torch.sum(invlogit * (-0.5*((xrg - on_mean[None, :])**2)
-                                        / (on_scale**2)[None, :]))
-        energy += torch.sum((1-invlogit) * (-0.5*(xrg**2)
-                                            / (off_scale**2)))
+              0.5*torch.einsum('ijk,jakb,iab->', sigma, glass_J, sigma))
+    energy = torch.einsum('ijk,jk->', sigma, glass_h)
+    for i in range(N):
+        for j in range(D-1):
+            for jp in range(j+1, D):
+                energy += torch.dot(sigma[i, j], torch.matmul(glass_J[j, jp],
+                                                              sigma[i, jp]))
     energy.backward()
     tst_score = xrg.grad
 
     assert torch.allclose(chk_score, tst_score)
 
 
-@pytest.mark.parametrize('kernel_l', [None, -0.5])
-def test_kernel_terms(kernel_l):
+def test_kernel_terms():
     N = 5
     D = 3
 
@@ -83,8 +72,7 @@ def test_kernel_terms(kernel_l):
     x = torch.randn((N, 3))
 
     steinglass = model.SteinGlass(gene_scale, gene_mean, glass_h, glass_J,
-                                  None, None, None, onoff_shapes=False,
-                                  kernel_beta=-0.5*3, kernel_l=kernel_l)
+                                  kernel_beta=-0.5*3)
     chk_K, chk_Kp, chk_Kpp, chk_Kbar = steinglass.kernel_terms(x)
 
     assert torch.allclose(torch.diag(chk_K), torch.zeros(N))
@@ -97,47 +85,27 @@ def test_kernel_terms(kernel_l):
             if i != j:
                 tst_K[i, j] = torch.prod((1 + (x[i, :] - x[j, :])**2)**-0.5,
                                          dim=-1)
-                if kernel_l is not None:
-                    tst_K[i, j] = tst_K[i, j] * torch.prod(
-                            (x[i, :] - kernel_l) * (x[j, :] - kernel_l))
     assert torch.allclose(tst_K, chk_K)
     assert torch.allclose(torch.sum(tst_K), chk_Kbar)
 
     xrg = torch.tensor(x, requires_grad=True)
-    if kernel_l is None:
-        K02 = torch.prod((1 + (xrg[0, :] - x[2, :])**2)**-0.5, dim=-1)
-    else:
-        K02 = torch.prod((1 + (xrg[0, :] - x[2, :])**2)**-0.5
-                         * (xrg[0, :] - kernel_l) * (x[2, :] - kernel_l),
-                         dim=-1)
+    K02 = torch.prod((1 + (xrg[0, :] - x[2, :])**2)**-0.5, dim=-1)
     K02.backward()
     assert torch.allclose(chk_Kp[0, 2], xrg.grad[0])
 
     tst_Kpp02 = 0
     for d in range(D):
         xrg = torch.tensor(x, requires_grad=True)
-        if kernel_l is None:
-            Kp02 = (2 * (-0.5) * (x[0, :] - xrg[2, :]) *
-                    (1/(1 + (x[0, :] - xrg[2, :])**2)) *
-                    torch.prod((1 + (x[0, :] - xrg[2, :])**2)**-0.5, dim=-1)
-                    )[d]
-        else:
-            Kp02 = (2 * (-0.5) * (x[0, :] - xrg[2, :]) *
-                    (1/(1 + (x[0, :] - xrg[2, :])**2)) *
-                    torch.prod((1 + (x[0, :] - xrg[2, :])**2)**-0.5
-                               * (x[0, :] - kernel_l)
-                               * (xrg[2, :] - kernel_l), dim=-1) +
-                    torch.prod((1 + (x[0, :] - xrg[2, :])**2)**-0.5
-                               * (x[0, :] - kernel_l)
-                               * (xrg[2, :] - kernel_l), dim=-1) / (
-                               x[0, :] - kernel_l))[d]
+        Kp02 = (2 * (-0.5) * (x[0, :] - xrg[2, :]) *
+                (1/(1 + (x[0, :] - xrg[2, :])**2)) *
+                torch.prod((1 + (x[0, :] - xrg[2, :])**2)**-0.5, dim=-1)
+                )[d]
         Kp02.backward()
         tst_Kpp02 += xrg.grad[2, d]
     assert torch.allclose(chk_Kpp[0, 2], tst_Kpp02)
 
 
-@pytest.mark.parametrize('kernel_l', [None, -0.5])
-def test_log_prob(kernel_l):
+def test_log_prob():
     N = 5
     D = 3
 
@@ -149,9 +117,7 @@ def test_log_prob(kernel_l):
     gene_mean = 0.1
     x = torch.randn((N, 3))
 
-    steinglass = model.SteinGlass(gene_scale, gene_mean, glass_h, glass_J,
-                                  None, None, None, onoff_shapes=False,
-                                  kernel_l=kernel_l)
+    steinglass = model.SteinGlass(gene_scale, gene_mean, glass_h, glass_J)
     sscore = steinglass.stein_score(x)
     K, Kp, Kpp, Kbar = steinglass.kernel_terms(x)
 
@@ -194,8 +160,7 @@ def test_dataselector_optim():
 
 
 @pytest.mark.parametrize('select_all', ['False', 'True'])
-@pytest.mark.parametrize('onoff_shapes', ['False', 'True'])
-def test_sparseglass(select_all, onoff_shapes):
+def test_sparseglass(select_all):
     # Smoke test.
     config = {'general': {'cpu_data': 'False',
                           'cuda': 'False',
@@ -209,20 +174,12 @@ def test_sparseglass(select_all, onoff_shapes):
                         'prior_gene_scale_lbound': '1',
                         'prior_gene_mean_mn': '0',
                         'prior_gene_mean_sd': '1',
-                        'prior_on_mean_mn': '0',
-                        'prior_on_mean_sd': '10',
-                        'prior_on_scale_mn': '0',
-                        'prior_on_scale_sd': '10',
-                        'prior_off_scale_mn': '0',
-                        'prior_off_scale_sd': '1',
-                        'onoff_shapes': onoff_shapes,
                         'prior_glass_h_sd': '1',
                         'prior_glass_J_scale': '0.1'},
               'svc': {'PY_mix_d': '2',
                       'PY_conc': '-0.25'},
               'nksd': {'kernel_c': '1',
                        'kernel_beta': '-0.5',
-                       'kernel_l': '-10',
                        'nksd_T': '1'},
               'train': {'batch_size': '5',
                         'learning_rate': '0.1',

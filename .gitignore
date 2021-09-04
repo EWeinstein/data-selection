@@ -1,3 +1,5 @@
 *.DS_Store
 *__pycache__
 svc/results/2*
+build
+data_selection.egg-info

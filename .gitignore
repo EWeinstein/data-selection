@@ -3,3 +3,4 @@
 svc/results/2*
 build
 data_selection.egg-info
+reinstall_check

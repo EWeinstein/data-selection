@@ -2,7 +2,7 @@
 # Bayesian data selection
 This repo provides example code implementing Bayesian data selection with the "Stein volume criterion (SVC)", as introduced in the paper
 
-> Bayesian data selection, Eli N. Weinstein and Jeffrey W. Miller, 2021
+> Bayesian data selection, Eli N. Weinstein and Jeffrey W. Miller, 2021, https://arxiv.org/abs/2109.02712
 
 ![Figure 1](Figure_1.png)
 

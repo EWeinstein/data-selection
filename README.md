@@ -8,7 +8,7 @@ This repo provides example code implementing Bayesian data selection with the "S
 
 ## Installation
 
-Download this repo, create a new python 3 virtual environment (eg. using conda), and run
+Download this repo, create a new python 3.9 virtual environment (eg. using conda), and run
 
     pip install .
 

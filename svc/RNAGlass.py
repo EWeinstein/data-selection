@@ -167,7 +167,7 @@ class DataSelector:
         return (1 - select).sum(-1) * self.cfactor
 
     def _logit(self):
-        """Logit of stochastic selection weights."""
+        """Logistic of stochastic selection weights."""
         return 1/(1 + torch.exp(-self.select_phi))
 
     def sample_select(self):
